@@ -1,12 +1,10 @@
 
 
-class Test:
-    att = 'class att'
-
-    def __init__(self):
-        self.att = 'instance att'
+from config import Config
 
 
-test = Test()
-print(test.att, Test.att)
+value = 2
+maxs = Config.durations.value[min(x for x in Config.durations.value if x > value)]
 
+
+print(maxs)

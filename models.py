@@ -1,19 +1,15 @@
 import datetime
-from abc import ABC
 from pathlib import Path
+
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Numeric
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
-from paths import aep_temp_dir, videos_dir, lyrics_client_secrets, lyrics_yt_credentials
-from config import Database
+from paths import Dir, File, Other, Binary
+from config import Database, Config
 from mutagen.mp3 import MP3
 
 Base = declarative_base()
-engine = create_engine('sqlite:///8d.db', echo=True)
-
-
-def migrate():
-    Base.metadata.create_all(bind=engine)
+engine = create_engine(f'sqlite:///{Binary.sqlite_db.value}')
 
 
 class get_session:
@@ -34,30 +30,45 @@ def get_mp3_duration(path):
 class Song(Base):
     __tablename__ = 'songs'
     id = Column('id', Integer, primary_key=True)
-    title = Column('title', String, unique=True)
-    path = Column('path', String, unique=True)
-    duration = Column('duration', Numeric)
+    __title = Column('title', String, unique=True)
+    __path = Column('path', String, unique=True)
+    __duration = Column('duration', Numeric)
     song_8d = relationship("Song8d", uselist=False, back_populates="song")
 
-    def __init__(self, path):
-        self.title = path.stem
+    def __init__(self, path: Path):
+        self.__title = path.stem.__str__()
+        self.__duration = get_mp3_duration(path)
         self.path = path
-        self.duration = get_mp3_duration(path)
+
+    @property
+    def title(self):
+        return self.__title
+
+    @property
+    def duration(self):
+        return self.__duration
+
+    @property
+    def path(self) -> Path:
+        return Dir.root.value / self.__path
+
+    @path.setter
+    def path(self, value: Path):
+        self.__path = value.relative_to(Dir.root.value).__str__()
 
     @classmethod
     def all(cls):
         with get_session() as session:
-            session.query(cls).all()
+            return session.query(cls).all()
 
-    # @classmethod
-    # def get_un8d_songs(cls):
-    #     with get_session() as session:
-    #         session.query(cls).notin(Song8d)
+    def exists(self):
+        with get_session() as session:
+            return session.query(Song).filter(Song.__title == self.__title).scalar()
+
 
     # def get_unrendered_songs(self):
     #     with get_session() as session:
     #         session.query()
-
 
     # def __init__(self, song_path: Path):
     #     self.id = input('This song\'s id is : ')
@@ -93,12 +104,39 @@ class Song(Base):
 class Song8d(Base):
     __tablename__ = 'songs_8d'
     id = Column('id', Integer, primary_key=True)
-    path = Column('path', String, unique=True)
-    song_id = Column(Integer, ForeignKey('songs.id'))
+    __title = Column('title', String, unique=True)
+    __path = Column('path', String, unique=True)
+    __song_id = Column(Integer, ForeignKey('songs.id'))
 
     song = relationship("Song", uselist=False, back_populates="song_8d")
     aep = relationship("AEP", uselist=False, back_populates="song_8d")
 
+    def __init__(self, song: Song):
+        self.path = (Dir.songs_8d.value / song.title).with_suffix('.mp3')
+        self.__title = f'{song.title} [8D]'
+        self.flp_path = (Dir.flp.value / Config.durations.value[
+            min(x for x in Config.durations.value if x > song.duration)])
+        self.song = song
+
+    @property
+    def title(self):
+        return self.__title
+
+    @property
+    def path(self):
+        return Dir.root.value / self.__path
+
+    @path.setter
+    def path(self, value: Path):
+        self.__path = value.relative_to(Dir.root.value).__str__()
+
+    @property
+    def flp_path(self) -> Path:
+        return Dir.root.value / self.__flp_path
+
+    @flp_path.setter
+    def flp_path(self, value: Path):
+        self.__flp_path = value.relative_to(Dir.root.value).__str__()
 
 class AEP(Base):
     __tablename__ = 'aeps'
@@ -140,8 +178,8 @@ class UploadedVideo(Base):
 class Channel:
     def __init__(self, name):
         self.name = name
-        self.yt_credentials = lyrics_yt_credentials
-        self.client_secrets = lyrics_client_secrets
+        self.yt_credentials = File.lyrics_yt_credentials.value
+        self.client_secrets = File.lyrics_client_secrets.value
         self.category = 'Music'
         self.publish_time = datetime.time(15, 0, 0)
         self.publish_days = {1, 3, 5}
@@ -173,6 +211,10 @@ class Channel:
                 .replace(tzinfo=datetime.timezone.utc)
 
         return publish_at
+
+
+def migrate():
+    Base.metadata.create_all(bind=engine)
 
 
 if __name__ == '__main__':

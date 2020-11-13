@@ -1,16 +1,26 @@
 import json
 import sqlite3
+from enum import Enum
 
 from sqlalchemy import create_engine
 
-from paths import root
+from paths import Dir, File
 
+
+class Config(Enum):
+    durations = {
+        160: '8D_160.flp',
+        180: '8D_180.flp',
+        210: '8D_210.flp',
+        240: '8D_240.flp',
+        360: '8D_360.flp'
+    }
 
 
 class Database:
     def __init__(self, db):
         self.__connection = None
-        self.host = root / f'databases/{db}.db'
+        self.host = Dir.root.value / f'databases/{db}.db'
 
     def get_connection(self):
         if self.__connection is not None:
@@ -67,6 +77,8 @@ class Database:
         #                'purpose VARCHAR(40)')
         self.get_connection().commit()
         print("create database")
+
+
 #
 #
 #
@@ -81,7 +93,7 @@ def configure_data():
     db.config_database()
     conn = db.get_connection()
     cursor = conn.cursor()
-    with open(json_uploaded_to_lyrics) as f:
+    with open(File.json_uploaded_to_lyrics.value) as f:
         uploaded_to_lyrics = json.load(f)
 
     for v in uploaded_to_lyrics:
