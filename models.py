@@ -8,6 +8,10 @@ from paths import Dir, File, Other, Binary
 from config import Database, Config
 from mutagen.mp3 import MP3
 
+
+
+
+
 Base = declarative_base()
 engine = create_engine(f'sqlite:///{Binary.sqlite_db.value}')
 
@@ -104,19 +108,23 @@ class Song(Base):
 class Song8d(Base):
     __tablename__ = 'songs_8d'
     id = Column('id', Integer, primary_key=True)
+    song_id = Column(Integer, ForeignKey('songs.id'))
     __title = Column('title', String, unique=True)
     __path = Column('path', String, unique=True)
-    __song_id = Column(Integer, ForeignKey('songs.id'))
 
     song = relationship("Song", uselist=False, back_populates="song_8d")
     aep = relationship("AEP", uselist=False, back_populates="song_8d")
 
     def __init__(self, song: Song):
-        self.path = (Dir.songs_8d.value / song.title).with_suffix('.mp3')
         self.__title = f'{song.title} [8D]'
+        self.path = (Dir.songs_8d.value / self.__title).with_suffix('.mp3')
         self.flp_path = (Dir.flp.value / Config.durations.value[
             min(x for x in Config.durations.value if x > song.duration)])
         self.song = song
+
+    @classmethod
+    def var(cls):
+        return cls._var
 
     @property
     def title(self):
@@ -138,25 +146,65 @@ class Song8d(Base):
     def flp_path(self, value: Path):
         self.__flp_path = value.relative_to(Dir.root.value).__str__()
 
+
 class AEP(Base):
     __tablename__ = 'aeps'
     id = Column('id', Integer, primary_key=True)
-    path = Column('path', String, unique=True)
     song_8d_id = Column(Integer, ForeignKey('songs_8d.id'))
+    __path = Column('path', String, unique=True)
 
     song_8d = relationship("Song8d", uselist=False, back_populates="aep")
     video = relationship("Video", uselist=False, back_populates="aep")
+    render_queue_item = relationship("RenderQueue", uselist=False, back_populates="aep")
+
+    def __init__(self, song_8d: Song8d):
+        self.song_8d_id = song_8d.id
+        self.path = (Dir.aep_temp.value / song_8d.title).with_suffix('.aep')
+
+    @property
+    def path(self):
+        return Dir.root.value / self.__path
+
+    @path.setter
+    def path(self, value: Path):
+        self.__path = value.relative_to(Dir.root.value).__str__()
+
+
+class RenderQueue(Base):
+    __tablename__ = 'render_queue'
+    id = Column('id', Integer, primary_key=True)
+    aep_id = Column(Integer, ForeignKey('aeps.id'))
+
+    aep = relationship("AEP", uselist=False, back_populates="render_queue_item")
+
+    def __init__(self, aep: AEP):
+        self.aep_id = aep.id
 
 
 class Video(Base):
     __tablename__ = 'videos'
     id = Column('id', Integer, primary_key=True)
-    path = Column('path', String, unique=True)
     aep_id = Column(Integer, ForeignKey('aeps.id'))
+    __path = Column('path', String, unique=True)
 
     aep = relationship("AEP", uselist=False, back_populates="video")
     upload_queue_item = relationship("UploadQueue", uselist=False, back_populates="video")
     uploaded_video = relationship("UploadedVideo", uselist=False, back_populates="video")
+
+    def __init__(self, aep):
+        self.aep_id = aep.id
+        self.path = (Dir.videos.value / aep.song_8d.title).with_suffix('.mp4')
+
+    @property
+    def path(self):
+        return Dir.root.value / self.__path
+
+    @path.setter
+    def path(self, value: Path):
+        self.__path = value.relative_to(Dir.root.value).__str__()
+
+    def exists(self):
+        return bool(self.path.stat().st_size) if self.path.exists() else False
 
 
 class UploadQueue(Base):

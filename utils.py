@@ -1,12 +1,11 @@
+import json
 import re
+import subprocess
 import time
 from shutil import copyfile
 
-from func_timeout import func_timeout, FunctionTimedOut
-
-from config import Config
-from models import Song, Song8d
-from paths import Dir, Other, Binary
+from models import Song, Song8d, AEP, Video
+from paths import Dir, Other, Binary, File
 from pywinauto import Application
 from pywinauto.timings import wait_until_passes
 from pywinauto.findwindows import ElementNotFoundError
@@ -64,3 +63,35 @@ def create_8d_song(song: Song) -> Song8d:
         return song8d
     finally:
         app.kill()
+
+
+def create_aep(song_8d: Song8d):
+    payload = {
+        'duration': float(song_8d.song.duration),
+        'origin_song': song_8d.song.path.__str__(),
+        'song_8d': song_8d.path.__str__(),
+        'bg': 'path ot bg',
+        'color': 'color'
+    }
+
+    with open(File.json_bridge.value, 'w') as f:
+        json.dump(payload, f, sort_keys=True, indent=2)
+
+    subprocess.call([Binary.afterfx_com.value, '-r', File.to_8d_script.value])
+
+    return True
+
+
+def render_aep(aep: AEP) -> Video:
+    video = Video(aep)
+    if video.exists():
+        return video
+    subprocess.call(
+        [Binary.aerender.value,
+         '-project', aep.path,
+         '-OMtemplate', 'H.264',
+         '-comp', 'Comp',
+         '-output', f'"{video.path}"'
+         ])
+
+    return video

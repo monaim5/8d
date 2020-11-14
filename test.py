@@ -1,10 +1,11 @@
 
 
-from config import Config
+class test:
+    title: str = '45'
+    def __init__(self):
+        self.title = 'not hello'
+        self._title = 'hello'
 
 
-value = 2
-maxs = Config.durations.value[min(x for x in Config.durations.value if x > value)]
-
-
-print(maxs)
+a = test()
+print(dir(test))

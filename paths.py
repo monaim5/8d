@@ -27,7 +27,7 @@ class Binary(Enum):
 class File(Enum):
     json_bridge = Dir.assets.value / 'bridge.json'
     json_uploaded_to_lyrics = Dir.assets.value / 'uploaded_to_lyrics.json'
-    lyrics_script_path = Dir.assets.value / 'aep/scripts/to_lyrics.jsx'
+    to_8d_script = Dir.assets.value / 'aep/scripts/to_8d.jsx'
     # must be in database
     lyrics_yt_credentials = Dir.assets.value / 'credentials/lyrics_yt_credentials.json'
     lyrics_client_secrets = Dir.assets.value / 'credentials/lyrics_client_secrets.json'
