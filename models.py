@@ -1,15 +1,12 @@
 import datetime
 from pathlib import Path
 
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Numeric
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Numeric, Date
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
 from paths import Dir, File, Other, Binary
 from config import Database, Config
 from mutagen.mp3 import MP3
-
-
-
 
 
 Base = declarative_base()
@@ -37,7 +34,7 @@ class Song(Base):
     __title = Column('title', String, unique=True)
     __path = Column('path', String, unique=True)
     __duration = Column('duration', Numeric)
-    song_8d = relationship("Song8d", uselist=False, back_populates="song")
+    song_8d = relationship("Song8d", uselist=False)
 
     def __init__(self, path: Path):
         self.__title = path.stem.__str__()
@@ -112,8 +109,8 @@ class Song8d(Base):
     __title = Column('title', String, unique=True)
     __path = Column('path', String, unique=True)
 
-    song = relationship("Song", uselist=False, back_populates="song_8d")
-    aep = relationship("AEP", uselist=False, back_populates="song_8d")
+    song = relationship("Song", uselist=False)
+    aep = relationship("AEP", uselist=False)
 
     def __init__(self, song: Song):
         self.__title = f'{song.title} [8D]'
@@ -153,9 +150,9 @@ class AEP(Base):
     song_8d_id = Column(Integer, ForeignKey('songs_8d.id'))
     __path = Column('path', String, unique=True)
 
-    song_8d = relationship("Song8d", uselist=False, back_populates="aep")
-    video = relationship("Video", uselist=False, back_populates="aep")
-    render_queue_item = relationship("RenderQueue", uselist=False, back_populates="aep")
+    song_8d = relationship("Song8d", uselist=False)
+    video = relationship("Video", uselist=False)
+    render_queue_item = relationship("RenderQueue", uselist=False)
 
     def __init__(self, song_8d: Song8d):
         self.song_8d_id = song_8d.id
@@ -174,8 +171,9 @@ class RenderQueue(Base):
     __tablename__ = 'render_queue'
     id = Column('id', Integer, primary_key=True)
     aep_id = Column(Integer, ForeignKey('aeps.id'))
-
-    aep = relationship("AEP", uselist=False, back_populates="render_queue_item")
+    # priority = Column('priority', Integer)
+    # added_date = Column('added_date', Date)
+    aep = relationship("AEP", uselist=False)
 
     def __init__(self, aep: AEP):
         self.aep_id = aep.id
@@ -187,9 +185,9 @@ class Video(Base):
     aep_id = Column(Integer, ForeignKey('aeps.id'))
     __path = Column('path', String, unique=True)
 
-    aep = relationship("AEP", uselist=False, back_populates="video")
-    upload_queue_item = relationship("UploadQueue", uselist=False, back_populates="video")
-    uploaded_video = relationship("UploadedVideo", uselist=False, back_populates="video")
+    aep = relationship("AEP", uselist=False)
+    upload_queue_item = relationship("UploadQueue", uselist=False)
+    uploaded_video = relationship("UploadedVideo", uselist=False)
 
     def __init__(self, aep):
         self.aep_id = aep.id
@@ -212,7 +210,10 @@ class UploadQueue(Base):
     id = Column('id', Integer, primary_key=True)
     video_id = Column(Integer, ForeignKey('videos.id'))
 
-    video = relationship("Video", uselist=False, back_populates="upload_queue_item")
+    video = relationship("Video", uselist=False)
+
+    def __init__(self, video: Video):
+        self.video_id = video.id
 
 
 class UploadedVideo(Base):
@@ -220,7 +221,7 @@ class UploadedVideo(Base):
     id = Column('id', Integer, primary_key=True)
     video_id = Column(Integer, ForeignKey('videos.id'))
 
-    video = relationship("Video", uselist=False, back_populates="uploaded_video")
+    video = relationship("Video", uselist=False)
 
 
 class Channel:

@@ -13,6 +13,10 @@ from pywinauto.findwindows import ElementNotFoundError
 
 def create_8d_song(song: Song) -> Song8d:
     song8d = Song8d(song)
+    print('------------------creating 8d song-------------------------')
+    time.sleep(5)
+    print('song converted to 8d after 5s')
+    return song8d
     copyfile(song.path, Other.flp_song.value)
     time.perf_counter()
     app = Application(backend="uia").start(f'"{Binary.fl_studio.value}" "{song8d.flp_path}"')
@@ -66,6 +70,10 @@ def create_8d_song(song: Song) -> Song8d:
 
 
 def create_aep(song_8d: Song8d):
+    print('------------------creating aep-------------------------')
+    time.sleep(5)
+    print('aep created after 5s')
+    return True
     payload = {
         'duration': float(song_8d.song.duration),
         'origin_song': song_8d.song.path.__str__(),
@@ -84,6 +92,10 @@ def create_aep(song_8d: Song8d):
 
 def render_aep(aep: AEP) -> Video:
     video = Video(aep)
+    print('------------------render_aep-------------------------')
+    time.sleep(5)
+    print('aep rendered after 5s')
+    return video
     if video.exists():
         return video
     subprocess.call(
@@ -95,3 +107,9 @@ def render_aep(aep: AEP) -> Video:
          ])
 
     return video
+
+
+def upload_video():
+    print('------------------upload video-------------------------')
+    time.sleep(5)
+    print('video uploaded 8d after 5s')
