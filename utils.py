@@ -5,13 +5,14 @@ import time
 from shutil import copyfile
 
 from models import Song, Song8d, AEP, Video
-from paths import Dir, Other, Binary, File
+from paths import Other, Binary, File
 from pywinauto import Application
 from pywinauto.timings import wait_until_passes
 from pywinauto.findwindows import ElementNotFoundError
 
 
 def create_8d_song(song: Song) -> Song8d:
+    # TODO: remove that testing purpose code
     song8d = Song8d(song)
     print('------------------creating 8d song-------------------------')
     time.sleep(5)
@@ -70,6 +71,7 @@ def create_8d_song(song: Song) -> Song8d:
 
 
 def create_aep(song_8d: Song8d):
+    # TODO: remove that testing purpose code
     print('------------------creating aep-------------------------')
     time.sleep(5)
     print('aep created after 5s')
@@ -91,6 +93,7 @@ def create_aep(song_8d: Song8d):
 
 
 def render_aep(aep: AEP) -> Video:
+    # TODO: remove that testing purpose code
     video = Video(aep)
     print('------------------render_aep-------------------------')
     time.sleep(5)
@@ -110,6 +113,7 @@ def render_aep(aep: AEP) -> Video:
 
 
 def upload_video():
+    # TODO: write this function code and remove the testing purpose code
     print('------------------upload video-------------------------')
     time.sleep(5)
     print('video uploaded 8d after 5s')

@@ -106,6 +106,10 @@ def render_aeps_process(queue: Queue, condition: Condition):
 
 
 def upload_video_process(upload_queue: Queue, condition: Condition):
+    # TODO: Test upload_queue items if they can deal another database session
+    #       (for deleting upload queue item) and (add video to uploaded_videos)
+    # TODO: Implement the upload_video function
+    # TODO: Add database process when upload complete
     """
     Upload videos in queue one by one
     :param upload_queue: The queue which we will use for uploading videos
@@ -130,6 +134,7 @@ def upload_video_process(upload_queue: Queue, condition: Condition):
 
 
 def main():
+
     queue = Queue()
     condition = Condition()
     uploading_process = Process(target=upload_video_process, args=(queue, condition))
