@@ -1,9 +1,6 @@
 import json
 import sqlite3
 from enum import Enum
-
-from sqlalchemy import create_engine
-
 from paths import Dir, File
 
 

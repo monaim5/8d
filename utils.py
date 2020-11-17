@@ -4,26 +4,22 @@ import subprocess
 import time
 from shutil import copyfile
 
-from models import Song, Song8d, AEP, Video
+from models import Song, Song8d, AEP, Video, UploadedVideo, Channel
 from paths import Other, Binary, File
 from pywinauto import Application
 from pywinauto.timings import wait_until_passes
 from pywinauto.findwindows import ElementNotFoundError
+from youtube_upload.main import main as yt_main
 
 
 def create_8d_song(song: Song) -> Song8d:
-    # TODO: remove that testing purpose code
     song8d = Song8d(song)
-    print('------------------creating 8d song-------------------------')
-    time.sleep(5)
-    print('song converted to 8d after 5s')
-    return song8d
     copyfile(song.path, Other.flp_song.value)
     time.perf_counter()
     app = Application(backend="uia").start(f'"{Binary.fl_studio.value}" "{song8d.flp_path}"')
     try:
         fl = wait_until_passes(timeout=10,
-                               retry_interval=0.1,
+                               retry_interval=2,
                                func=lambda: app.top_window().children()[0])
 
         fl.type_keys('^+r')
@@ -71,11 +67,6 @@ def create_8d_song(song: Song) -> Song8d:
 
 
 def create_aep(song_8d: Song8d):
-    # TODO: remove that testing purpose code
-    print('------------------creating aep-------------------------')
-    time.sleep(5)
-    print('aep created after 5s')
-    return True
     payload = {
         'duration': float(song_8d.song.duration),
         'origin_song': song_8d.song.path.__str__(),
@@ -93,12 +84,7 @@ def create_aep(song_8d: Song8d):
 
 
 def render_aep(aep: AEP) -> Video:
-    # TODO: remove that testing purpose code
     video = Video(aep)
-    print('------------------render_aep-------------------------')
-    time.sleep(5)
-    print('aep rendered after 5s')
-    return video
     if video.exists():
         return video
     subprocess.call(
@@ -112,8 +98,24 @@ def render_aep(aep: AEP) -> Video:
     return video
 
 
-def upload_video():
-    # TODO: write this function code and remove the testing purpose code
-    print('------------------upload video-------------------------')
-    time.sleep(5)
-    print('video uploaded 8d after 5s')
+def upload_video(video: Video, channel: Channel, **kwargs) -> UploadedVideo:
+    # edited the youtube_upload.main.run_main and youtube_upload.main.main
+    # by adding (video_ids: list) for return it at the end, by the main function
+
+    uploaded_video = UploadedVideo(video, channel)
+
+    arguments = []
+    publish_date = channel.next_publish_date()
+
+    for arg in kwargs:
+        arguments.append(f'--{arg.replace("_", "-")}={kwargs.get(arg)}')
+    arguments.extend((f'--client-secrets={channel.client_secrets}',
+                      f'--credentials-file={channel.yt_credentials}',
+                      f'--publish-at={publish_date}'))
+    arguments.append(video.path)
+
+    uploaded_video.published_date = publish_date
+    video_ids = yt_main(arguments)
+    uploaded_video.yt_video_id = video_ids[0]
+
+    return uploaded_video
