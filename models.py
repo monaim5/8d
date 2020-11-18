@@ -1,16 +1,17 @@
 import datetime
+import shutil
 from ast import literal_eval
 from pathlib import Path
 from enum import Enum as NativeEnum
 from typing import List
 
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Numeric, Date, Time, Enum, ARRAY, func
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Numeric, Date, Time, func, Enum
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
-from paths import Dir, File, Other, Binary
-from config import Database, Config
-from mutagen.mp3 import MP3
 
+from paths import Dir, File, Binary, Other
+from config import Config, Color
+from mutagen.mp3 import MP3
 
 Base = declarative_base()
 engine = create_engine(f'sqlite:///{Binary.sqlite_db.value}')
@@ -25,6 +26,7 @@ __all__ = [
     'UploadQueue',
     'UploadedVideo',
     'Channel',
+    'Background'
 ]
 
 
@@ -56,13 +58,48 @@ def get_mp3_duration(path):
 class MyBase:
     def add(self, session, *, flush=False, commit=False):
         session.add(self)
-        session.flush() if flush else None
-        session.commit() if commit else None
+        if flush:
+            session.flush()
+        if commit:
+            session.commit()
 
     def delete(self, session, *, flush, commit):
         session.delete(self)
-        session.flush() if flush else None
-        session.commit() if commit else None
+        if flush:
+            session.flush()
+        if commit:
+            session.commit()
+
+    def archive(self, session):
+        new_path = self.path.parent / 'archive' / self.path.name
+        shutil.move(self.path, new_path)
+        self.path = new_path
+        session.commit()
+
+
+class Background(Base, MyBase):
+    __tablename__ = 'backgrounds'
+    id = Column('id', Integer, primary_key=True)
+    title = Column('title', String, unique=True)
+    __path = Column('path', String)
+
+    aep = relationship("AEP")
+
+    def __init__(self, path: Path):
+        self.title = path.stem.__str__()
+        self.path = path
+
+    @property
+    def path(self) -> Path:
+        return Dir.root.value / self.__path
+
+    @path.setter
+    def path(self, value: Path):
+        self.__path = value.relative_to(Dir.root.value).__str__()
+
+    def exists(self):
+        with get_session() as session:
+            return session.query(Background).filter(Background.title == self.title).scalar()
 
 
 class Song(Base, MyBase):
@@ -104,7 +141,7 @@ class Song8d(Base, MyBase):
     def __init__(self, song: Song):
         self.title = f'{song.title} [8D]'
         self.song_id = song.id
-        self.path = (Dir.songs_8d.value / self.title).with_suffix('.mp3')
+        self.path = Dir.songs_8d.value / (self.title + '.mp3')
         self.flp_path = (Dir.flp.value / Config.durations.value[
             min(x for x in Config.durations.value if x > song.duration)])
 
@@ -124,28 +161,46 @@ class Song8d(Base, MyBase):
     def flp_path(self, value: Path):
         self.__flp_path = value.relative_to(Dir.root.value).__str__()
 
+    def exists(self):
+        return bool(self.path.stat().st_size) if self.path.exists() else False
+
 
 class AEP(Base, MyBase):
     __tablename__ = 'aeps'
     id = Column('id', Integer, primary_key=True)
     song_8d_id = Column(Integer, ForeignKey('songs_8d.id'))
+    background_id = Column(Integer, ForeignKey('backgrounds.id'))
+    color = Column('color', Enum(Color))
     __path = Column('path', String, unique=True)
+    __template_path = Column('template_path', String)
 
     song_8d = relationship("Song8d", uselist=False)
+    background = relationship("Background", uselist=False)
     video = relationship("Video", uselist=False)
     render_queue_item = relationship("RenderQueue", uselist=False)
 
-    def __init__(self, song_8d: Song8d):
+    def __init__(self, song_8d: Song8d, background: Background, color: Color):
         self.song_8d_id = song_8d.id
-        self.path = (Dir.aep_temp.value / song_8d.title).with_suffix('.aep')
+        self.background_id = background.id
+        self.color = color
+        self.path = Dir.aep_temp.value / (song_8d.title + '.aep')
+        self.template_path = Other.template_8d.value
 
     @property
-    def path(self):
+    def path(self) -> Path:
         return Dir.root.value / self.__path
 
     @path.setter
     def path(self, value: Path):
         self.__path = value.relative_to(Dir.root.value).__str__()
+
+    @property
+    def template_path(self) -> Path:
+        return Dir.root.value / self.__template_path
+
+    @template_path.setter
+    def template_path(self, value: Path):
+        self.__template_path = value.relative_to(Dir.root.value).__str__()
 
 
 class RenderQueue(Base, MyBase):
@@ -173,7 +228,7 @@ class Video(Base, MyBase):
 
     def __init__(self, aep):
         self.aep_id = aep.id
-        self.path = (Dir.videos.value / aep.song_8d.title).with_suffix('.mp4')
+        self.path = Dir.videos.value / (aep.song_8d.title + '.mp4')
         self.title = aep.song_8d.title
 
     @property
@@ -205,8 +260,8 @@ class Channel(Base, MyBase):
     def __init__(self, name):
         self.name = name
         self.yt_channel_id = 'UCaVHqBYCGSXbSfXVv0EcLxw'
-        self.yt_credentials = File.lyrics_yt_credentials.value
-        self.client_secrets = File.lyrics_client_secrets.value
+        self.yt_credentials = File.yt_credentials_8d.value
+        self.client_secrets = File.client_secrets_8d.value
         self.category = 'Music'
         self.publish_time = datetime.time(15, 0, 0)
         self.publish_days = [WeekDays.tue.name, WeekDays.thu.name, WeekDays.sat.name]

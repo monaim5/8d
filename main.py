@@ -1,8 +1,11 @@
+import shutil
+
 from paths import Dir
 from models import *
 from multiprocessing import Process, Condition, Queue
 
 from utils import *
+from youtube_metadata import *
 
 
 def register_songs_process(session):
@@ -17,7 +20,20 @@ def register_songs_process(session):
         if song.exists():
             continue
         song.add(session, flush=False, commit=True)
+        added_songs += 1
     print(f'{added_songs} song has been added to database')
+
+
+def register_backgrounds_process(session):
+    backgrounds = Dir.backgrounds.value.glob('*.jpg')
+    backgrounds_added = 0
+    for background_path in backgrounds:
+        background = Background(background_path)
+        if background.exists():
+            continue
+        background.add(session, flush=False, commit=True)
+        backgrounds_added += 1
+    print(f'{backgrounds_added} background has been added to database')
 
 
 def convert_to_8ds_process(session):
@@ -46,23 +62,25 @@ def create_aeps_process(session):
     :param session: The current database connection
     :type session: sqlalchemy.orm.session.Session
     """
-    aep_in_rq = session.query(RenderQueue.aep_id)
+    # aep_in_rq = session.query(RenderQueue.aep_id)
     # return list of song_ids which the 8d song have aep but not approved
-    aep_rendered = session.query(Video.aep_id)
-    aep_not_in_rq_and_vid = session.query(AEP.song_8d_id).filter(AEP.id.notin_(aep_in_rq)) \
-                                                         .filter(AEP.id.notin_(aep_rendered))
-    songs_not_in_rq_and_vid = session.query(Song8d).filter(Song8d.id.in_(aep_not_in_rq_and_vid)).all()
+    # aep_rendered = session.query(Video.aep_id)
+    # aep_not_in_rq_and_vid = session.query(AEP.song_8d_id).filter(AEP.id.notin_(aep_in_rq)) \
+    #                                                      .filter(AEP.id.notin_(aep_rendered))
+    # songs_not_in_rq_and_vid = session.query(Song8d).filter(Song8d.id.in_(aep_not_in_rq_and_vid)).all()
+
+    # for song_8d in songs_not_in_rq_and_vid:
+    #     create_aep(song_8d, background, color)
+    #     RenderQueue(song_8d.aep).add(session, flush=False, commit=True)
 
     aeps = session.query(AEP.song_8d_id)
     songs_havnt_aep = session.query(Song8d).filter(Song8d.id.notin_(aeps)).all()
 
-    for song_8d in songs_not_in_rq_and_vid:
-        create_aep(song_8d)
-        RenderQueue(song_8d.aep).add(session, flush=False, commit=True)
-
-    for song_8d in songs_havnt_aep:
-        aep = AEP(song_8d)
-        create_aep(song_8d)
+    bg_used = session.query(AEP.background_id)
+    backgrounds = session.query(Background).filter(Background.id.notin_(bg_used))
+    for song_8d, background in zip(songs_havnt_aep, backgrounds):
+        color = Color.get_random()
+        aep = create_aep(song_8d, background, color)
         aep.add(session, flush=True, commit=False)
         RenderQueue(aep).add(session, flush=False, commit=True)
 
@@ -88,19 +106,25 @@ def render_aeps_process(session, queue: Queue, condition: Condition):
     """
     render_queue_items = session.query(RenderQueue).all()
     channel = session.query(Channel).filter(Channel.name == '8d').one()
+    print(f'{len(render_queue_items)} item in render queue')
     for item in render_queue_items:
         video = render_aep(item.aep)
         video.add(session, flush=True, commit=False)
-        UploadQueue(video, channel).add(session, flush=True, commit=False)
+
+        item.aep.background.archive(session)
+        item.aep.song_8d.archive(session)
+        item.aep.song_8d.song.archive(session)
+
+        upload_queue_item = UploadQueue(video, channel)
+        upload_queue_item.add(session, flush=True, commit=True)
+        queue.put((upload_queue_item.video, channel))
         item.delete(session, flush=False, commit=True)
-        queue.put((video, channel))
         with condition:
             condition.notify_all()
 
 
 def upload_video_process(upload_queue: Queue, condition: Condition):
-    """
-    Upload videos in queue one by one
+    """Upload videos in queue one by one
     :param upload_queue: The queue which we will use for uploading videos
     :type upload_queue: multiprocessing.Queue
     :param condition: this param Condition we will use it for make the upload process
@@ -108,23 +132,34 @@ def upload_video_process(upload_queue: Queue, condition: Condition):
                       or resume it after we added videos to queue, where it was waiting
     :type condition: multiprocessing.Condition
     """
+    video_index = 1
     with get_session() as session:
         while True:
+            if upload_queue.empty():
+                with condition:
+                    print('waiting for videos to upload')
+                    condition.wait()
+
             upload_queue_item = upload_queue.get()
             if upload_queue_item is None:
                 print('upload videos done')
                 return
 
             video, channel = upload_queue_item
-            uploaded_video = upload_video(video, channel, title=video.title)
-            uploaded_video.add(session=session, commit=True)
-            session.query(UploadQueue).filter(UploadQueue.video_id == video.id).delete()
-            session.commit()
-
-            if upload_queue.empty():
-                with condition:
-                    print('waiting for other videos')
-                    condition.wait()
+            try:
+                print(f'uploading the {video_index} video')
+                uploaded_video = upload_video(video, channel,
+                                              title=generate_title(video.title),
+                                              description=generate_desc(video.title),
+                                              tags=generate_tags(video.title),
+                                              publish_at=channel.next_publish_date(session))
+                uploaded_video.add(session=session, commit=True)
+                session.query(UploadQueue).filter(UploadQueue.video_id == video.id).delete()
+                session.commit()
+                video_index += 1
+            except ConnectionResetError as e:
+                print(e.__class__)
+                print(e)
 
 
 def main():
@@ -142,12 +177,12 @@ def main():
 
         try:
             register_songs_process(session)
+            register_backgrounds_process(session)
             convert_to_8ds_process(session)
             create_aeps_process(session)
             render_aeps_process(session=session, queue=queue, condition=condition)
 
         finally:
-            print('None added to the queue')
             queue.put(None)
             with condition:
                 condition.notify_all()

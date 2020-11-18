@@ -1,6 +1,8 @@
 import json
 import sqlite3
 from enum import Enum
+from random import choice
+
 from paths import Dir, File
 
 
@@ -12,6 +14,63 @@ class Config(Enum):
         240: '8D_240.flp',
         360: '8D_360.flp'
     }
+
+    # colors = {
+    #     'red': '#9c0000',
+    #     'red_light': '#eb6767',
+    #     'green': '#007d0a',
+    #     'green_light': '#4ab553',
+    #     'blue': '#0000ab',
+    #     'blue_light': '##5454ff',
+    #     'yellow': '#b5ac00',
+    #     'yellow_light': '#fff64f',
+    #     'cyan': '#009485',
+    #     'cyan_light': '#49fcea',
+    #     'purple': '#8a0087',
+    #     'purple_light': '#d65ed4',
+    #
+    # }
+
+    headers = {
+        "Host": "www.musixmatch.com",
+        "Connection": "keep-alive",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36",
+        "Upgrade-Insecure-Requests": "1",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+
+class Color(Enum):
+    red = '#9c0000'
+    red_light = '#eb6767'
+    green = '#007d0a'
+    green_light = '#4ab553'
+    blue = '#0000ab'
+    blue_light = '##5454ff'
+    yellow = '#b5ac00'
+    yellow_light = '#fff64f'
+    cyan = '#009485'
+    cyan_light = '#49fcea'
+    purple = '#8a0087'
+    purple_light = '#d65ed4'
+
+    @classmethod
+    def get_random(cls):
+        return choice(list(cls))
+
+
+class Bcolors(Enum):
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 
 class Database:

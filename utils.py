@@ -2,9 +2,12 @@ import json
 import re
 import subprocess
 import time
+from datetime import datetime
+from random import random
 from shutil import copyfile
 
-from models import Song, Song8d, AEP, Video, UploadedVideo, Channel
+from config import Bcolors, Color
+from models import Song, Song8d, AEP, Video, UploadedVideo, Channel, Background
 from paths import Other, Binary, File
 from pywinauto import Application
 from pywinauto.timings import wait_until_passes
@@ -14,11 +17,13 @@ from youtube_upload.main import main as yt_main
 
 def create_8d_song(song: Song) -> Song8d:
     song8d = Song8d(song)
+    if song8d.exists():
+       return song8d
     copyfile(song.path, Other.flp_song.value)
     time.perf_counter()
     app = Application(backend="uia").start(f'"{Binary.fl_studio.value}" "{song8d.flp_path}"')
     try:
-        fl = wait_until_passes(timeout=10,
+        fl = wait_until_passes(timeout=120,
                                retry_interval=2,
                                func=lambda: app.top_window().children()[0])
 
@@ -66,13 +71,16 @@ def create_8d_song(song: Song) -> Song8d:
         app.kill()
 
 
-def create_aep(song_8d: Song8d):
+def create_aep(song_8d: Song8d, background: Background, color: Color):
+    aep = AEP(song_8d, background, color)
     payload = {
         'duration': float(song_8d.song.duration),
-        'origin_song': song_8d.song.path.__str__(),
+        'original_song': song_8d.song.path.__str__(),
         'song_8d': song_8d.path.__str__(),
-        'bg': 'path ot bg',
-        'color': 'color'
+        'aep': aep.path.__str__(),
+        'template': aep.template_path.__str__(),
+        'bg': background.path.__str__(),
+        'color': color.value
     }
 
     with open(File.json_bridge.value, 'w') as f:
@@ -80,7 +88,7 @@ def create_aep(song_8d: Song8d):
 
     subprocess.call([Binary.afterfx_com.value, '-r', File.to_8d_script.value])
 
-    return True
+    return aep
 
 
 def render_aep(aep: AEP) -> Video:
@@ -105,17 +113,26 @@ def upload_video(video: Video, channel: Channel, **kwargs) -> UploadedVideo:
     uploaded_video = UploadedVideo(video, channel)
 
     arguments = []
-    publish_date = channel.next_publish_date()
 
     for arg in kwargs:
         arguments.append(f'--{arg.replace("_", "-")}={kwargs.get(arg)}')
     arguments.extend((f'--client-secrets={channel.client_secrets}',
                       f'--credentials-file={channel.yt_credentials}',
-                      f'--publish-at={publish_date}'))
-    arguments.append(video.path)
+                      f'--category={channel.category}'))
+    arguments.append(video.path.__str__())
 
-    uploaded_video.published_date = publish_date
-    video_ids = yt_main(arguments)
-    uploaded_video.yt_video_id = video_ids[0]
+    uploaded_video.published_date = kwargs['publish_at'] if kwargs['publish_at'] is not None else datetime.now()
 
-    return uploaded_video
+    upload_try = 1
+    while upload_try <= 3:
+        try:
+            print(f'{Bcolors.WARNING.value}{Bcolors.BOLD.value}the {upload_try} try{Bcolors.ENDC.value}')
+            uploaded_video.yt_video_id = yt_main(arguments)[0]
+            return uploaded_video
+
+        except ConnectionResetError as e:
+            upload_try += 1
+            print(f'try {upload_try} {e.__class__} : {e}')
+
+    raise ConnectionResetError
+

@@ -8,6 +8,12 @@ class Dir(Enum):
     songs_8d = root / '8d_songs'
     videos = root / 'videos'
     backgrounds = root / 'backgrounds'
+
+    songs_archive = root / 'songs' / 'archive'
+    songs_8d_archive = root / '8d_songs' / 'archive'
+    videos_archive = root / 'videos' / 'archive'
+    backgrounds_archive = root / 'backgrounds' / 'archive'
+
     assets = root / 'assets'
     bin = root / 'bin'
     aep_temp = assets / 'aep/temp'
@@ -29,12 +35,13 @@ class File(Enum):
     json_uploaded_to_lyrics = Dir.assets.value / 'uploaded_to_lyrics.json'
     to_8d_script = Dir.assets.value / 'aep/scripts/to_8d.jsx'
     # must be in database
-    lyrics_yt_credentials = Dir.assets.value / 'credentials/lyrics_yt_credentials.json'
-    lyrics_client_secrets = Dir.assets.value / 'credentials/lyrics_client_secrets.json'
+    yt_credentials_8d = Dir.assets.value / 'credentials/8d_yt_credentials.json'
+    client_secrets_8d = Dir.assets.value / 'credentials/8d_client_secrets.json'
 
 
 class Other(Enum):
     flp_song = Dir.flp.value / 'song.mp3'
+    template_8d = Dir.assets.value / 'aep/templates/to_8d.aep'
 
 
 def init_paths():
