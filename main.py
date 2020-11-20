@@ -1,5 +1,7 @@
 import shutil
 
+from sqlalchemy.exc import IntegrityError
+
 from paths import Dir
 from models import *
 from multiprocessing import Process, Condition, Queue
@@ -19,7 +21,7 @@ def register_songs_process(session):
         song = Song(song_path)
         if song.exists():
             continue
-        song.add(session, flush=False, commit=True)
+        song.add(session, commit=True)
         added_songs += 1
     print(f'{added_songs} song has been added to database')
 
@@ -31,7 +33,7 @@ def register_backgrounds_process(session):
         background = Background(background_path)
         if background.exists():
             continue
-        background.add(session, flush=False, commit=True)
+        background.add(session, commit=True)
         backgrounds_added += 1
     print(f'{backgrounds_added} background has been added to database')
 
@@ -49,7 +51,7 @@ def convert_to_8ds_process(session):
     songs = session.query(Song).filter(~Song.id.in_(sub_query)).all()
 
     for song in songs:
-        create_8d_song(song).add(session, flush=False, commit=True)
+        create_8d_song(song).add(session, commit=True)
 
 
 def create_aeps_process(session):
@@ -81,8 +83,8 @@ def create_aeps_process(session):
     for song_8d, background in zip(songs_havnt_aep, backgrounds):
         color = Color.get_random()
         aep = create_aep(song_8d, background, color)
-        aep.add(session, flush=True, commit=False)
-        RenderQueue(aep).add(session, flush=False, commit=True)
+        aep.add(session, flush=True)
+        RenderQueue(aep).add(session, commit=True)
 
 
 def render_aeps_process(session, queue: Queue, condition: Condition):
@@ -109,16 +111,16 @@ def render_aeps_process(session, queue: Queue, condition: Condition):
     print(f'{len(render_queue_items)} item in render queue')
     for item in render_queue_items:
         video = render_aep(item.aep)
-        video.add(session, flush=True, commit=False)
-
+        video.add(session, flush=True)
+        item.delete(session, flush=True)
         item.aep.background.archive(session)
         item.aep.song_8d.archive(session)
         item.aep.song_8d.song.archive(session)
-
+        item.aep.archive(session)
         upload_queue_item = UploadQueue(video, channel)
-        upload_queue_item.add(session, flush=True, commit=True)
-        queue.put((upload_queue_item.video, channel))
-        item.delete(session, flush=False, commit=True)
+        upload_queue_item.add(session, commit=True)
+        print(f'render complete for video {video.title}')
+        queue.put(upload_queue_item)
         with condition:
             condition.notify_all()
 
@@ -144,17 +146,17 @@ def upload_video_process(upload_queue: Queue, condition: Condition):
             if upload_queue_item is None:
                 print('upload videos done')
                 return
-
-            video, channel = upload_queue_item
+            upload_queue_item = session.merge(upload_queue_item)
+            video, channel = upload_queue_item.video, upload_queue_item.channel
             try:
-                print(f'uploading the {video_index} video')
+                print(f'uploading the {video_index} video : {video.title}')
                 uploaded_video = upload_video(video, channel,
                                               title=generate_title(video.title),
                                               description=generate_desc(video.title),
                                               tags=generate_tags(video.title),
                                               publish_at=channel.next_publish_date(session))
                 uploaded_video.add(session=session, commit=True)
-                session.query(UploadQueue).filter(UploadQueue.video_id == video.id).delete()
+                session.delete(upload_queue_item)
                 session.commit()
                 video_index += 1
             except ConnectionResetError as e:
@@ -171,9 +173,9 @@ def main():
         upload_queue = session.query(UploadQueue).all()
 
         for item in upload_queue:
-            queue.put((item.video, item.channel))
-
-        uploading_process.start()
+            queue.put(item)
+        if input('parallel videos upload? (y, n) (default n) : ') == 'y':
+            uploading_process.start()
 
         try:
             register_songs_process(session)

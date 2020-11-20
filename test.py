@@ -1,19 +1,17 @@
 import re
+from pathlib import Path
 
-from models import Song, Song8d, get_session
+from models import Song, Song8d, get_session, AEP, Video, Channel
 from paths import Dir
 
 from utils import create_8d_song
 
+
 with get_session() as session:
-    songs = session.query(Song).all()
+    channel: Channel = session.query(Channel).get(2)
 
-    for song in songs:
-        title = re.sub('[0-9]*\. ', '', song.title)
-        song.title = 'Ariana grande - ' + title
+print(channel.mro())
+
+with get_session() as session:
+    session.delete(channel)
     session.commit()
-
-
-
-
-

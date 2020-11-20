@@ -94,7 +94,7 @@ def create_aep(song_8d: Song8d, background: Background, color: Color):
 def render_aep(aep: AEP) -> Video:
     video = Video(aep)
     if video.exists():
-        return video
+        return aep.video
     subprocess.call(
         [Binary.aerender.value,
          '-project', aep.path,

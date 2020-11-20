@@ -1,12 +1,14 @@
 import datetime
+import re
 import shutil
-from ast import literal_eval
+from ast import literal_eval, parse
 from pathlib import Path
 from enum import Enum as NativeEnum
 from typing import List
 
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Numeric, Date, Time, func, Enum
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import sessionmaker, relationship, Session
 from sqlalchemy.ext.declarative import declarative_base
 
 from paths import Dir, File, Binary, Other
@@ -41,8 +43,8 @@ class WeekDays(NativeEnum):
 
 
 class get_session:
-    def __enter__(self):
-        self.session = sessionmaker(bind=engine)()
+    def __enter__(self) -> Session:
+        self.session = sessionmaker(bind=engine, expire_on_commit=True)()
         return self.session
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -56,14 +58,22 @@ def get_mp3_duration(path):
 
 
 class MyBase:
-    def add(self, session, *, flush=False, commit=False):
+    def add(self, session, *, flush=False, commit=False, expire=False):
+        # try:
         session.add(self)
         if flush:
             session.flush()
         if commit:
             session.commit()
+        if expire:
+            session.expire(self)
+        # except IntegrityError as e:
+        #     duplicated_field = re.search('^.*\.(.*)', str(e.orig))[1]
+        #     session.refresh()
+        #     # print(duplicated_field)
 
-    def delete(self, session, *, flush, commit):
+
+    def delete(self, session, *, flush=False, commit=False):
         session.delete(self)
         if flush:
             session.flush()
@@ -72,9 +82,13 @@ class MyBase:
 
     def archive(self, session):
         new_path = self.path.parent / 'archive' / self.path.name
-        shutil.move(self.path, new_path)
-        self.path = new_path
-        session.commit()
+        try:
+            shutil.move(self.path, new_path)
+            self.path = new_path
+            session.commit()
+        except FileNotFoundError:
+            print('file not found maybe it was archived already')
+            return
 
 
 class Background(Base, MyBase):
@@ -125,7 +139,7 @@ class Song(Base, MyBase):
 
     def exists(self):
         with get_session() as session:
-            return session.query(Song).filter(Song.title == self.title).scalar()
+            return session.query(Song).filter(Song.__path == self.__path).scalar()
 
 
 class Song8d(Base, MyBase):
@@ -257,7 +271,7 @@ class Channel(Base, MyBase):
     uploaded_videos = relationship("UploadedVideo")
     upload_queue_items = relationship("UploadQueue")
 
-    def __init__(self, name):
+    def __init__(self, name, **kwargs):
         self.name = name
         self.yt_channel_id = 'UCaVHqBYCGSXbSfXVv0EcLxw'
         self.yt_credentials = File.yt_credentials_8d.value
